@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: blob:; img-src * data: blob:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: blob:; img-src * data: blob:; media-src * data: blob:;">
   <title>Projector</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -17,6 +17,19 @@
       align-items: center;
       justify-content: center;
       font-family: sans-serif;
+    }
+
+    /* Fullscreen background video, sits behind the verse text. The body
+       background-color/image handles the solid + image cases; this element
+       only appears when bgMediaType === 'video'. */
+    #bg-video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+      z-index: -1;
     }
 
     #verse-layer {
@@ -60,6 +73,8 @@
 </head>
 <body>
 
+  <video id="bg-video" autoplay loop muted playsinline></video>
+
   <div id="verse-layer">
     <div id="verse-content"></div>
   </div>
@@ -76,6 +91,7 @@
     const imageLayer  = document.getElementById('image-layer')
     const projImage   = document.getElementById('proj-image')
     const blankOverlay = document.getElementById('blank-overlay')
+    const bgVideo     = document.getElementById('bg-video')
 
     function showVerse() {
       imageLayer.style.display  = 'none'
@@ -97,12 +113,101 @@
       showBlank()
     })
 
+    // style_update messages are INCREMENTAL — a font/colour change carries no
+    // bgUrl, and a background clear sends only { bgImage:false }. So we keep a
+    // merged style state and only ever change a field a message explicitly
+    // includes; bgUrl is dropped solely when bgImage:false arrives. This
+    // mirrors the Go companion's merge()/snapshot() behaviour.
+    const styleState = {
+      bgColor:     '#000000',
+      bgImage:     false,
+      bgMediaType: 'image',
+      bgUrl:       '',
+      fontColor:   '#ffffff',
+      fontFamily:  '',
+      fontSize:    null,
+    }
+
+    // Merge an incoming style into styleState. Returns true when the
+    // background media needs to be re-rendered (so a font/colour change does
+    // not pointlessly re-fetch — and flash — the background image).
+    function mergeStyle(s) {
+      let refreshMedia = false
+      if (s.bgColor    !== undefined) styleState.bgColor    = s.bgColor
+      if (s.fontColor  !== undefined) styleState.fontColor  = s.fontColor
+      if (s.fontFamily !== undefined) styleState.fontFamily = s.fontFamily
+      if (s.fontSize   !== undefined) styleState.fontSize   = s.fontSize
+      if (s.bgMediaType !== undefined && s.bgMediaType !== styleState.bgMediaType) {
+        styleState.bgMediaType = s.bgMediaType
+        refreshMedia = true
+      }
+      if (s.bgImage !== undefined) {
+        if (s.bgImage !== styleState.bgImage) refreshMedia = true
+        styleState.bgImage = s.bgImage
+        if (s.bgImage === false) { styleState.bgUrl = ''; refreshMedia = true }
+      }
+      // Only update bgUrl when explicitly provided and non-empty — never null
+      // it out just because a message omitted it. A present bgUrl always means
+      // a new/re-uploaded background, so re-render to pick up fresh content.
+      if (s.bgUrl !== undefined && s.bgUrl !== '') {
+        styleState.bgUrl = s.bgUrl
+        refreshMedia = true
+      }
+      return refreshMedia
+    }
+
+    // Render the background from styleState, matching the operator panel:
+    //   bgImage false        → solid bgColor fill
+    //   bgImage true + image → background image (center/cover) over bgColor
+    //   bgImage true + video → fullscreen <video> behind the verse
+    // bgUrl is sent absolute by the operator. A ?t= cache-buster is appended so
+    // a re-uploaded background (same URL, new content) is fetched fresh.
+    function applyMedia() {
+      const hasMedia = styleState.bgImage === true && !!styleState.bgUrl
+      if (!hasMedia) {
+        bgVideo.style.display = 'none'
+        bgVideo.removeAttribute('src')
+        document.body.style.backgroundImage = 'none'
+        return
+      }
+
+      const sep = styleState.bgUrl.indexOf('?') === -1 ? '?' : '&'
+      const url = styleState.bgUrl + sep + 't=' + Date.now()
+
+      if (styleState.bgMediaType === 'video') {
+        document.body.style.backgroundImage = 'none'
+        if (bgVideo.getAttribute('src') !== url) bgVideo.src = url
+        bgVideo.style.display = 'block'
+        bgVideo.play().catch(() => {})
+      } else {
+        bgVideo.style.display = 'none'
+        bgVideo.removeAttribute('src')
+        document.body.style.backgroundImage   = "url('" + url + "')"
+        document.body.style.backgroundSize     = 'cover'
+        document.body.style.backgroundPosition = 'center'
+        document.body.style.backgroundRepeat   = 'no-repeat'
+      }
+    }
+
+    function renderStyle(refreshMedia) {
+      verseContent.style.color = styleState.fontColor
+      if (styleState.fontFamily) verseContent.style.fontFamily = styleState.fontFamily
+      if (styleState.fontSize != null) {
+        verseContent.style.fontSize =
+          typeof styleState.fontSize === 'number'
+            ? styleState.fontSize + 'rem'
+            : styleState.fontSize
+      }
+      // Solid colour sits behind the image/video as the fallback — always cheap
+      // to set and never triggers a media re-fetch.
+      document.body.style.backgroundColor = styleState.bgColor || '#000000'
+      if (refreshMedia) applyMedia()
+    }
+
     window.companion.onStyleUpdate((style) => {
       if (!style) return
-      if (style.bgColor)    document.body.style.background     = style.bgColor
-      if (style.fontColor)  verseContent.style.color           = style.fontColor
-      if (style.fontFamily) verseContent.style.fontFamily      = style.fontFamily
-      if (style.fontSize)   verseContent.style.fontSize        = style.fontSize
+      const refreshMedia = mergeStyle(style)
+      renderStyle(refreshMedia)
     })
 
     window.companion.onImageDisplay(({ url }) => {

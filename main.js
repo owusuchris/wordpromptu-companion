@@ -18,6 +18,28 @@ let wsClient = null
 // Map of screenIndex -> BrowserWindow (projector windows)
 const projectorWindows = new Map()
 
+// Merged style snapshot from the operator panel. style_update messages are
+// incremental (a font change carries no bgUrl; a clear sends only
+// { bgImage:false }), so we merge them into a full snapshot and replay that to
+// any projector opened later (windows are lazy-opened). Storing just the last
+// message would lose the background whenever the last change was font-only.
+let styleSnapshot = null
+
+function mergeStyleSnapshot(s) {
+  if (!s) return
+  if (!styleSnapshot) styleSnapshot = {}
+  for (const k of ['bgColor', 'bgMediaType', 'fontColor', 'fontFamily', 'fontSize']) {
+    if (s[k] !== undefined) styleSnapshot[k] = s[k]
+  }
+  if (s.bgImage !== undefined) {
+    styleSnapshot.bgImage = s.bgImage
+    if (s.bgImage === false) delete styleSnapshot.bgUrl
+  }
+  // Only update bgUrl when explicitly provided — never drop it just because a
+  // message omitted it (it is cleared above when bgImage:false arrives).
+  if (s.bgUrl !== undefined && s.bgUrl !== '') styleSnapshot.bgUrl = s.bgUrl
+}
+
 // ── Preferences ────────────────────────────────────────────────────────────
 function loadPrefs() {
   try { return JSON.parse(fs.readFileSync(PREFS_FILE, 'utf8')) } catch { return {} }
@@ -82,6 +104,9 @@ function openProjector(screenIndex) {
   })
 
   win.webContents.once('did-finish-load', () => {
+    // Apply the merged style so a lazily-opened projector shows the correct
+    // background/fonts immediately, not just after the next change.
+    if (styleSnapshot) win.webContents.send('style-update', styleSnapshot)
     sendToClient({ type: 'projector_opened', screen_index: screenIndex })
     notifySettingsWin()
   })
@@ -247,6 +272,7 @@ function handleMessage(msg, ws) {
       break
 
     case 'style_update':
+      mergeStyleSnapshot(msg.style)
       sendToAllProjectors('style-update', msg.style)
       reply({ type: 'ok' })
       break

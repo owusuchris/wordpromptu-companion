@@ -7,7 +7,7 @@ const fs = require('fs')
 
 const WS_PORT = 8765
 const COMPANION_VERSION = '3.0'
-const FEATURES = ['multi_screen', 'lazy_open_projector', 'video_via_browser', 'screen_index', 'go_build']
+const FEATURES = ['multi_screen', 'lazy_open_projector', 'video_via_browser', 'screen_index', 'go_build', 'open_display_url']
 const PREFS_FILE = path.join(app.getPath('userData'), 'preferences.json')
 
 let tray = null
@@ -17,6 +17,9 @@ let wsClient = null
 
 // Map of screenIndex -> BrowserWindow (projector windows)
 const projectorWindows = new Map()
+
+// Map of screenIndex -> BrowserWindow (secondary display windows — load remote URLs via SSE)
+const displayWindows = new Map()
 
 // Merged style snapshot from the operator panel. style_update messages are
 // incremental (a font change carries no bgUrl; a clear sends only
@@ -132,6 +135,49 @@ function closeAllProjectors() {
   projectorWindows.clear()
 }
 
+// ── Secondary display windows (load Wordpromptu display.html via SSE) ──────
+function openDisplayUrl(screenIndex, url) {
+  const displays = screen.getAllDisplays()
+  const display  = displays[screenIndex] ?? screen.getPrimaryDisplay()
+  const { x, y, width, height } = display.bounds
+
+  // Replace any existing display on this screen
+  if (displayWindows.has(screenIndex)) {
+    const existing = displayWindows.get(screenIndex)
+    if (!existing.isDestroyed()) existing.close()
+  }
+
+  const win = new BrowserWindow({
+    x, y, width, height,
+    frame:           false,
+    fullscreen:      true,
+    alwaysOnTop:     true,
+    backgroundColor: '#000000',
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration:  false,
+    },
+  })
+
+  win.loadURL(url)
+  displayWindows.set(screenIndex, win)
+
+  win.on('closed', () => {
+    displayWindows.delete(screenIndex)
+    notifySettingsWin()
+  })
+
+  win.webContents.once('did-finish-load', () => {
+    sendToClient({ type: 'display_opened', screen_index: screenIndex })
+    notifySettingsWin()
+  })
+}
+
+function closeAllDisplayWindows() {
+  displayWindows.forEach((win) => { if (!win.isDestroyed()) win.close() })
+  displayWindows.clear()
+}
+
 // ── Screen identification (flash overlay) ──────────────────────────────────
 function identifyScreens() {
   screen.getAllDisplays().forEach((d, i) => {
@@ -173,6 +219,10 @@ function notifySettingsWin() {
       screens:    getScreenList(),
       connected:  wsClient !== null && wsClient.readyState === WebSocket.OPEN,
       projectors: Array.from(projectorWindows.keys()),
+      displays:   Array.from(displayWindows.entries()).map(([idx, win]) => ({
+        screen_index: idx,
+        url: win.isDestroyed() ? '' : win.webContents.getURL(),
+      })),
     })
   }
 }
@@ -182,6 +232,10 @@ ipcMain.handle('get-state', () => ({
   screens:    getScreenList(),
   connected:  wsClient !== null && wsClient.readyState === WebSocket.OPEN,
   projectors: Array.from(projectorWindows.keys()),
+  displays:   Array.from(displayWindows.entries()).map(([idx, win]) => ({
+    screen_index: idx,
+    url: win.isDestroyed() ? '' : win.webContents.getURL(),
+  })),
   wsPort:     WS_PORT,
 }))
 
@@ -192,6 +246,11 @@ ipcMain.on('close-projector', (_, idx) => {
   if (win && !win.isDestroyed()) win.close()
 })
 ipcMain.on('identify-screens', () => identifyScreens())
+ipcMain.on('close-display', (_, idx) => {
+  if (idx === undefined) { closeAllDisplayWindows(); return }
+  const win = displayWindows.get(idx)
+  if (win && !win.isDestroyed()) win.close()
+})
 
 // ── WebSocket server ────────────────────────────────────────────────────────
 function startWebSocketServer() {
@@ -293,6 +352,21 @@ function handleMessage(msg, ws) {
       reply({ type: 'ok' })
       break
 
+    case 'open_display_url':
+      openDisplayUrl(msg.screen_index ?? 0, msg.url)
+      reply({ type: 'ok' })
+      break
+
+    case 'close_display_url':
+      if (msg.screen_index !== undefined) {
+        const dwin = displayWindows.get(msg.screen_index)
+        if (dwin && !dwin.isDestroyed()) dwin.close()
+      } else {
+        closeAllDisplayWindows()
+      }
+      reply({ type: 'ok' })
+      break
+
     default:
       reply({ type: 'ok' })
   }
@@ -313,6 +387,7 @@ function createTray() {
     { label: 'Open Settings', click: openSettings },
     { type: 'separator' },
     { label: 'Close All Projectors', click: closeAllProjectors },
+    { label: 'Close All Display Windows', click: closeAllDisplayWindows },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
   ])
@@ -331,5 +406,6 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   closeAllProjectors()
+  closeAllDisplayWindows()
   if (wsServer) wsServer.close()
 })

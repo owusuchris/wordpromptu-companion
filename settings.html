@@ -155,6 +155,29 @@
       padding: 40px 0;
       font-size: 14px;
     }
+
+    .section-gap { margin-top: 24px; }
+
+    .display-card {
+      background: #0f2027;
+      border: 1px solid #1e3a5f;
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .display-url {
+      flex: 1;
+      font-size: 12px;
+      color: #60a5fa;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .btn-close-display { background: #374151; color: #e0e0e0; }
   </style>
 </head>
 <body>
@@ -172,6 +195,13 @@
     <div class="section-title">Connected Screens</div>
     <div class="screen-list" id="screen-list">
       <div class="empty-state">Loading screens…</div>
+    </div>
+
+    <div class="section-gap">
+      <div class="section-title">Secondary Display Windows</div>
+      <div class="screen-list" id="display-list">
+        <div class="empty-state" id="display-empty">No secondary displays open</div>
+      </div>
     </div>
   </main>
 
@@ -203,30 +233,54 @@
       const list = document.getElementById('screen-list')
       if (!state.screens || state.screens.length === 0) {
         list.innerHTML = '<div class="empty-state">No screens detected</div>'
-        return
+      } else {
+        list.innerHTML = state.screens.map(s => {
+          const isOpen = state.projectors.includes(s.index)
+          return `
+            <div class="screen-card ${isOpen ? 'active' : ''}">
+              <div class="screen-icon">${s.is_primary ? '🖥️' : '📺'}</div>
+              <div class="screen-info">
+                <div class="screen-name">${s.name}</div>
+                <div class="screen-meta">${s.width} × ${s.height} &nbsp;•&nbsp; ${s.x},${s.y} ${isOpen ? '&nbsp;• <span style="color:#a78bfa">Projector open</span>' : ''}</div>
+              </div>
+              <div class="screen-actions">
+                ${isOpen
+                  ? `<button class="btn-close" onclick="closeProjector(${s.index})">Close</button>`
+                  : `<button class="btn-open"  onclick="openProjector(${s.index})">Open</button>`
+                }
+              </div>
+            </div>`
+        }).join('')
       }
 
-      list.innerHTML = state.screens.map(s => {
-        const isOpen = state.projectors.includes(s.index)
-        return `
-          <div class="screen-card ${isOpen ? 'active' : ''}">
-            <div class="screen-icon">${s.is_primary ? '🖥️' : '📺'}</div>
-            <div class="screen-info">
-              <div class="screen-name">${s.name}</div>
-              <div class="screen-meta">${s.width} × ${s.height} &nbsp;•&nbsp; ${s.x},${s.y} ${isOpen ? '&nbsp;• <span style="color:#a78bfa">Projector open</span>' : ''}</div>
-            </div>
-            <div class="screen-actions">
-              ${isOpen
-                ? `<button class="btn-close"  onclick="closeProjector(${s.index})">Close</button>`
-                : `<button class="btn-open"   onclick="openProjector(${s.index})">Open</button>`
-              }
-            </div>
-          </div>`
-      }).join('')
+      // Secondary display windows
+      const dlist = document.getElementById('display-list')
+      const displays = state.displays || []
+      if (displays.length === 0) {
+        dlist.innerHTML = '<div class="empty-state">No secondary displays open</div>'
+      } else {
+        const screenMap = Object.fromEntries((state.screens || []).map(s => [s.index, s.name]))
+        dlist.innerHTML = displays.map(d => {
+          const screenName = screenMap[d.screen_index] || `Screen ${d.screen_index + 1}`
+          const shortUrl = d.url.replace(/^https?:\/\/[^/]+/, '') || d.url
+          return `
+            <div class="display-card">
+              <div class="screen-icon">🪟</div>
+              <div class="screen-info">
+                <div class="screen-name">${screenName}</div>
+                <div class="display-url" title="${d.url}">${shortUrl}</div>
+              </div>
+              <div class="screen-actions">
+                <button class="btn-close-display" onclick="closeDisplay(${d.screen_index})">Close</button>
+              </div>
+            </div>`
+        }).join('')
+      }
     }
 
     function openProjector(idx)  { window.companion.openProjector(idx) }
     function closeProjector(idx) { window.companion.closeProjector(idx) }
+    function closeDisplay(idx)   { window.companion.closeDisplay(idx) }
 
     document.getElementById('btn-identify').addEventListener('click', () => {
       window.companion.identifyScreens()

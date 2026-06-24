@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('companion', {
   getState:        ()    => ipcRenderer.invoke('get-state'),
   openProjector:   (idx) => ipcRenderer.send('open-projector', idx),
   closeProjector:  (idx) => ipcRenderer.send('close-projector', idx),
+  closeDisplay:    (idx) => ipcRenderer.send('close-display', idx),
   identifyScreens: ()    => ipcRenderer.send('identify-screens'),
   onStateUpdate:   (fn)  => ipcRenderer.on('state-update', (_, data) => fn(data)),
 

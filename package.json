@@ -1,6 +1,6 @@
 {
   "name": "wordpromptu-companion",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "description": "Wordpromptu Multi-Screen Companion App",
   "main": "main.js",
   "homepage": "https://wordpromptu.com",
@@ -28,6 +28,9 @@
     "win": {
       "target": "nsis",
       "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "include": "installer.nsh"
     },
     "mac": {
       "target": "dmg",

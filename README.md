@@ -90,7 +90,7 @@ The companion acts as the **server**. Wordpromptu connects to it.
 | `identify_screens` | Flash number on each screen for 5s |
 | `open_projector` + `screen_index` | Open projector on that screen |
 | `update_verse` + `content` (HTML) | Display verse |
-| `clear_projector` | Blank the screen |
+| `clear_projector` | Clear verse text only — persistent background stays visible |
 | `close_projector` | Close projector window |
 | `style_update` + `style` object | Change font/colors |
 | `image_display` + `image_url` | Show image fullscreen |

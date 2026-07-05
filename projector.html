@@ -71,12 +71,6 @@
       object-fit: contain;
     }
 
-    #blank-overlay {
-      position: absolute;
-      inset: 0;
-      background: #000;
-      display: none;
-    }
   </style>
 </head>
 <body>
@@ -94,8 +88,6 @@
     <img id="proj-image" src="" alt="">
   </div>
 
-  <div id="blank-overlay"></div>
-
   <script>
     const verseLayer  = document.getElementById('verse-layer')
     const verseContent = document.getElementById('verse-content')
@@ -103,17 +95,11 @@
     const verseText   = document.getElementById('verse-text')
     const imageLayer  = document.getElementById('image-layer')
     const projImage   = document.getElementById('proj-image')
-    const blankOverlay = document.getElementById('blank-overlay')
     const bgVideo     = document.getElementById('bg-video')
 
     function showVerse() {
       imageLayer.style.display  = 'none'
-      blankOverlay.style.display = 'none'
       verseLayer.style.opacity  = '1'
-    }
-
-    function showBlank() {
-      blankOverlay.style.display = 'block'
     }
 
     window.companion.onUpdateVerse(({ content, reference }) => {
@@ -124,9 +110,12 @@
     })
 
     window.companion.onClearProjector(() => {
+      // Clear the verse text only — the persistent projector background
+      // (image/video/colour set in Display Settings) must stay visible.
+      // showBlank() would cover it with an opaque black overlay, which is
+      // what "Clear Verse" is explicitly not supposed to do.
       verseRef.textContent = ''
       verseText.innerHTML = ''
-      showBlank()
     })
 
     // style_update messages are INCREMENTAL — a font/colour change carries no

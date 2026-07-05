@@ -135,8 +135,26 @@ function closeAllProjectors() {
   projectorWindows.clear()
 }
 
+// ── URL validation ───────────────────────────────────────────────────────────
+// Only http/https may be handed to shell.openExternal() or loaded into a
+// BrowserWindow from a WS message. Without this, any local process or web
+// page that connects to the (unauthenticated, localhost-only) WS server
+// could hand us a custom URL scheme — some registered protocol handlers on
+// Windows/macOS can be abused for unexpected side effects — or a
+// file:/data: URL to load arbitrary local content into a fullscreen window.
+function isSafeUrl(url) {
+  if (typeof url !== 'string' || !url) return false
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 // ── Secondary display windows (load Wordpromptu display.html via SSE) ──────
 function openDisplayUrl(screenIndex, url) {
+  if (!isSafeUrl(url)) return
   const displays = screen.getAllDisplays()
   const display  = displays[screenIndex] ?? screen.getPrimaryDisplay()
   const { x, y, width, height } = display.bounds
@@ -254,7 +272,10 @@ ipcMain.on('close-display', (_, idx) => {
 
 // ── WebSocket server ────────────────────────────────────────────────────────
 function startWebSocketServer() {
-  wsServer = new WebSocket.Server({ port: WS_PORT })
+  // Bind explicitly to loopback. Without a `host`, the `ws` library binds to
+  // all interfaces (0.0.0.0), which would expose this unauthenticated control
+  // channel to anything on the local network, not just this machine.
+  wsServer = new WebSocket.Server({ port: WS_PORT, host: '127.0.0.1' })
 
   wsServer.on('listening', () => {
     console.log(`WS server listening on port ${WS_PORT}`)
@@ -311,7 +332,7 @@ function handleMessage(msg, ws) {
       break
 
     case 'update_verse':
-      sendToProjector(msg.screen_index, 'update-verse', { content: msg.content })
+      sendToProjector(msg.screen_index, 'update-verse', { content: msg.content, reference: msg.reference })
       reply({ type: 'ok' })
       break
 
@@ -343,7 +364,9 @@ function handleMessage(msg, ws) {
 
     case 'video_display':
       // Open in default browser — same behaviour as Go companion
-      require('electron').shell.openExternal(msg.video_url)
+      if (isSafeUrl(msg.video_url)) {
+        require('electron').shell.openExternal(msg.video_url)
+      }
       reply({ type: 'ok' })
       break
 

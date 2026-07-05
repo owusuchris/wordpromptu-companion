@@ -48,6 +48,14 @@
       line-height: 1.4;
     }
 
+    #verse-ref {
+      font-size: 1.2em;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 0.6em;
+    }
+
     #image-layer {
       position: absolute;
       inset: 0;
@@ -76,7 +84,10 @@
   <video id="bg-video" autoplay loop muted playsinline></video>
 
   <div id="verse-layer">
-    <div id="verse-content"></div>
+    <div id="verse-content">
+      <div id="verse-ref"></div>
+      <div id="verse-text"></div>
+    </div>
   </div>
 
   <div id="image-layer">
@@ -88,6 +99,8 @@
   <script>
     const verseLayer  = document.getElementById('verse-layer')
     const verseContent = document.getElementById('verse-content')
+    const verseRef    = document.getElementById('verse-ref')
+    const verseText   = document.getElementById('verse-text')
     const imageLayer  = document.getElementById('image-layer')
     const projImage   = document.getElementById('proj-image')
     const blankOverlay = document.getElementById('blank-overlay')
@@ -103,13 +116,16 @@
       blankOverlay.style.display = 'block'
     }
 
-    window.companion.onUpdateVerse(({ content }) => {
-      verseContent.innerHTML = content || ''
+    window.companion.onUpdateVerse(({ content, reference }) => {
+      verseRef.textContent = reference || ''
+      verseRef.style.display = reference ? '' : 'none'
+      verseText.innerHTML = content || ''
       showVerse()
     })
 
     window.companion.onClearProjector(() => {
-      verseContent.innerHTML = ''
+      verseRef.textContent = ''
+      verseText.innerHTML = ''
       showBlank()
     })
 

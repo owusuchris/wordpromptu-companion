@@ -7,7 +7,7 @@ const fs = require('fs')
 
 const WS_PORT = 8765
 const COMPANION_VERSION = '3.0'
-const FEATURES = ['multi_screen', 'lazy_open_projector', 'video_via_browser', 'screen_index', 'go_build', 'open_display_url']
+const FEATURES = ['multi_screen', 'lazy_open_projector', 'video_via_browser', 'screen_index', 'go_build', 'open_display_url', 'projector_state']
 const PREFS_FILE = path.join(app.getPath('userData'), 'preferences.json')
 
 let tray = null
@@ -72,6 +72,17 @@ function sendToClient(msg) {
 }
 
 // ── Projector window ────────────────────────────────────────────────────────
+
+// Tells the operator panel exactly which screens currently have an open
+// projector window. Sent on every open/close AND right when a client first
+// connects — a projector_opened reply alone only reaches whichever browser
+// tab requested the open, so a freshly-loaded/reconnected operator panel
+// (with the projector already running from before) would otherwise never
+// learn this and could offer that same screen to "Add display".
+function broadcastProjectorState() {
+  sendToClient({ type: 'projector_state', screens: Array.from(projectorWindows.keys()) })
+}
+
 function openProjector(screenIndex) {
   const displays = screen.getAllDisplays()
   const display  = displays[screenIndex] ?? screen.getPrimaryDisplay()
@@ -82,6 +93,7 @@ function openProjector(screenIndex) {
     if (!existing.isDestroyed()) {
       existing.focus()
       sendToClient({ type: 'projector_opened', screen_index: screenIndex })
+      broadcastProjectorState()
       return
     }
   }
@@ -104,6 +116,7 @@ function openProjector(screenIndex) {
   win.on('closed', () => {
     projectorWindows.delete(screenIndex)
     notifySettingsWin()
+    broadcastProjectorState()
   })
 
   win.webContents.once('did-finish-load', () => {
@@ -112,6 +125,7 @@ function openProjector(screenIndex) {
     if (styleSnapshot) win.webContents.send('style-update', styleSnapshot)
     sendToClient({ type: 'projector_opened', screen_index: screenIndex })
     notifySettingsWin()
+    broadcastProjectorState()
   })
 }
 
@@ -291,6 +305,10 @@ function startWebSocketServer() {
     // Greet immediately
     ws.send(JSON.stringify({ type: 'hello', version: COMPANION_VERSION, features: FEATURES }))
     ws.send(JSON.stringify({ type: 'screens', screens: getScreenList() }))
+    // Tell a freshly-connecting client about any projector already running
+    // from before it existed — otherwise it has no way to know, and could
+    // offer that same screen to "Add display".
+    ws.send(JSON.stringify({ type: 'projector_state', screens: Array.from(projectorWindows.keys()) }))
 
     ws.on('message', (raw) => {
       let msg

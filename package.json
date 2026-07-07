@@ -1,6 +1,6 @@
 {
   "name": "wordpromptu-companion",
-  "version": "3.0.6",
+  "version": "3.0.7",
   "description": "Wordpromptu Multi-Screen Companion App",
   "main": "main.js",
   "homepage": "https://wordpromptu.com",
@@ -46,6 +46,7 @@
     "electron-builder": "^24.0.0"
   },
   "dependencies": {
+    "hls.js": "^1.6.16",
     "ws": "^8.17.0"
   }
 }

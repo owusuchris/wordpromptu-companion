@@ -384,17 +384,12 @@ function handleMessage(msg, ws) {
       // Render natively inside the projector window instead of shelling out
       // to the system browser (the old behaviour — inherited from the
       // Python/Go companions, which couldn't embed a web renderer at all).
-      // Electron's own Chromium renderer already plays <video>/YouTube
-      // embeds fine, same as image_display above. The one exception is HLS
-      // (.m3u8): without a bundled hls.js, Chromium's <video> tag can't play
-      // it natively, so that one case still falls back to the external
-      // browser rather than silently showing nothing on the projector.
+      // Electron's own Chromium renderer plays <video>/YouTube embeds fine,
+      // same as image_display above; HLS (.m3u8) is handled projector-side
+      // via a locally bundled hls.js (projector.html), so every URL shape
+      // now stays on the projector window.
       if (isSafeUrl(msg.video_url)) {
-        if (/\.m3u8(\?|#|$)/i.test(msg.video_url)) {
-          require('electron').shell.openExternal(msg.video_url)
-        } else {
-          sendToProjector(msg.screen_index, 'video-display', { url: msg.video_url })
-        }
+        sendToProjector(msg.screen_index, 'video-display', { url: msg.video_url })
       }
       reply({ type: 'ok' })
       break

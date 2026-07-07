@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: blob:; img-src * data: blob:; media-src * data: blob:; frame-src https://www.youtube.com;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: blob:; img-src * data: blob:; media-src * data: blob:; frame-src https://www.youtube.com; connect-src * data: blob:;">
   <title>Projector</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -110,6 +110,9 @@
     <iframe id="proj-yt" style="display:none;" allow="autoplay; fullscreen" allowfullscreen></iframe>
   </div>
 
+  <!-- Bundled locally (not a CDN) so playback works offline and the CSP
+       above doesn't need a script-src relaxation for a third-party host. -->
+  <script src="assets/hls.min.js"></script>
   <script>
     const verseLayer  = document.getElementById('verse-layer')
     const verseContent = document.getElementById('verse-content')
@@ -127,10 +130,22 @@
       return m ? m[1] : null
     }
 
+    function _isHlsUrl(url) {
+      return /\.m3u8(\?|#|$)/i.test(url)
+    }
+
+    function _destroyHls() {
+      if (projVideo._ivHls) {
+        try { projVideo._ivHls.destroy() } catch (_) {}
+        projVideo._ivHls = null
+      }
+    }
+
     function hideVideoLayer() {
       videoLayer.style.display = 'none'
       projYt.style.display = 'none'
       projYt.src = ''
+      _destroyHls()
       projVideo.pause()
       projVideo.removeAttribute('src')
     }
@@ -139,15 +154,28 @@
       const ytId = _extractYouTubeId(url)
       videoLayer.style.display = 'flex'
       if (ytId) {
+        _destroyHls()
         projVideo.pause()
         projVideo.style.display = 'none'
         projYt.style.display = 'block'
         projYt.src = `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=1&rel=0&playsinline=1`
+        return
+      }
+      projYt.style.display = 'none'
+      projYt.src = ''
+      projVideo.style.display = 'block'
+      projVideo.muted = true
+      _destroyHls()
+      if (_isHlsUrl(url) && window.Hls && window.Hls.isSupported()) {
+        // Bundled hls.js drives MediaSource for the .m3u8 manifest + segments
+        // (Chromium, unlike Safari, has no native HLS support).
+        projVideo.removeAttribute('src')
+        const hls = new window.Hls({ lowLatencyMode: true })
+        hls.loadSource(url)
+        hls.attachMedia(projVideo)
+        hls.on(window.Hls.Events.MANIFEST_PARSED, () => projVideo.play().catch(() => {}))
+        projVideo._ivHls = hls
       } else {
-        projYt.style.display = 'none'
-        projYt.src = ''
-        projVideo.style.display = 'block'
-        projVideo.muted = true
         projVideo.src = url
         projVideo.play().catch(() => {})
       }

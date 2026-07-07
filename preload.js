@@ -16,5 +16,6 @@ contextBridge.exposeInMainWorld('companion', {
   onClearProjector:(fn)=> ipcRenderer.on('clear-projector',(_, d) => fn(d)),
   onStyleUpdate:  (fn) => ipcRenderer.on('style-update',  (_, d) => fn(d)),
   onImageDisplay: (fn) => ipcRenderer.on('image-display', (_, d) => fn(d)),
+  onVideoDisplay: (fn) => ipcRenderer.on('video-display', (_, d) => fn(d)),
   onClearMedia:   (fn) => ipcRenderer.on('clear-media',   (_, d) => fn(d)),
 })

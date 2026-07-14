@@ -1,6 +1,6 @@
 {
   "name": "wordpromptu-companion",
-  "version": "3.0.7",
+  "version": "3.0.8",
   "description": "Wordpromptu Multi-Screen Companion App",
   "main": "main.js",
   "homepage": "https://wordpromptu.com",
@@ -34,7 +34,8 @@
     },
     "mac": {
       "target": "dmg",
-      "icon": "assets/icon.icns"
+      "icon": "assets/icon.icns",
+      "arch": "universal"
     },
     "linux": {
       "target": "deb",

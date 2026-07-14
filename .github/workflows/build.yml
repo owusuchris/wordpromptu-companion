@@ -17,12 +17,15 @@ jobs:
           - os: windows-latest
             platform: win
             artifact_glob: "dist/*.exe"
+            build_flag: ""
           - os: macos-latest
             platform: mac
             artifact_glob: "dist/*.dmg"
+            build_flag: "--universal"
           - os: ubuntu-latest
             platform: linux
             artifact_glob: "dist/*.deb"
+            build_flag: ""
 
     runs-on: ${{ matrix.os }}
     name: Build (${{ matrix.platform }})
@@ -41,7 +44,7 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npx electron-builder --${{ matrix.platform }} --publish never
+        run: npx electron-builder --${{ matrix.platform }} ${{ matrix.build_flag }} --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
